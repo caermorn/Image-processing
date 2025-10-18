@@ -1,44 +1,43 @@
-# Library imports
-from libtiff import TIFF 
-from matplotlib import pyplot as plt
 import sys
-import numpy as np 
+import numpy as np
+import matplotlib.pyplot as plt
+from libtiff import TIFF
 
-
-# Normalize to uint8 
+# Normalize image to uint8
 def normalize_uint8(img):
-
     min_val = img.min()
     max_val = img.max()
     if max_val == min_val:
         return np.zeros_like(img, dtype=np.uint8)
     return ((img - min_val) / (max_val - min_val) * 255).astype(np.uint8)
 
-# Load a .tiff or .svs
+# Load a .tiff 
 def load_tiff(file_path: str):
     try:
         tiff = TIFF.open(file_path, mode='r')
-        first_page = next(tiff.iter_images())
+        first_img = next(tiff.iter_images(), None)  # Take only the first page
         tiff.close()
-        return [first_page]
+
+        if first_img is None:
+            print("Error: No images found in TIFF.")
+            return None
+
+        return normalize_uint8(first_img)
+
     except Exception as e:
         print("Error loading file:", e)
-        return []
-
+        return None
 
 # Display functions
 def show_grayscale(img, title=None):
-    img_uint8 = normalize_uint8(img) 
-    plt.imshow(img_uint8, cmap='gray', interpolation='nearest', vmin=0, vmax=255)
+    plt.imshow(img, cmap='gray', interpolation='nearest', vmin=0, vmax=255)
     if title:
         plt.title(title)
     plt.axis('off')
     plt.show()
 
-
 def show_color(img, title=None):
-    img_uint8 = normalize_uint8(img) if img.dtype != np.uint8 else img  
-    plt.imshow(img_uint8, interpolation='nearest', vmin=0, vmax=255)
+    plt.imshow(img, interpolation='nearest', vmin=0, vmax=255)
     if title:
         plt.title(title)
     plt.axis('off')
@@ -52,10 +51,14 @@ def load_subregion(path, x, y, w, h):
             return None
         img = imgs[0]
         H, W = img.shape[:2]
-        # Clip coordinates
-        x1, y1 = max(0, min(W, x + w)), max(0, min(H, y + h))
-        x, y = max(0, x), max(0, y)
-        sub = img[y:y1, x:x1]
+
+        # Clip coordinates properly
+        x1 = min(W, x + w)
+        y1 = min(H, y + h)
+        x0 = max(0, x)
+        y0 = max(0, y)
+
+        sub = img[y0:y1, x0:x1]
         return sub
     except Exception as e:
         print("Error loading subregion:", e)
@@ -74,12 +77,10 @@ def combine_to_rgb(red_path, green_path, blue_path, out_path):
     r, g, b = r_imgs[0], g_imgs[0], b_imgs[0]  # Only first page
 
     if r.shape != g.shape or r.shape != b.shape:
-        print("input sizes do not match")
+        print("Input sizes do not match")
         return
 
-    rgb = np.stack([normalize_uint8(r),
-                    normalize_uint8(g),
-                    normalize_uint8(b)], axis=-1)
+    rgb = np.stack([r, g, b], axis=-1) 
     show_color(rgb, title='Combined RGB Image')
 
     try:
@@ -94,10 +95,11 @@ def combine_to_rgb(red_path, green_path, blue_path, out_path):
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         sys.exit(0)
-
+        print('Wrong call!')
     cmd = sys.argv[1]
+    file_path = sys.argv[2]
 
-    if cmd == '--show-full':
+    if cmd in ['--show', '-s']:
         imgs = load_tiff(sys.argv[2])
         for i, img in enumerate(imgs):
             if img.ndim == 2:
@@ -105,7 +107,7 @@ if __name__ == '__main__':
             else:
                 show_color(img, f"Page {i}")
 
-    elif cmd == '--show-subregion':
+    elif cmd in ['--subregion', '-sr']:
         if len(sys.argv) != 7:
             sys.exit(0)
         x, y, w, h = map(int, sys.argv[3:7])
@@ -116,7 +118,7 @@ if __name__ == '__main__':
             else:
                 show_color(sub, f"Subregion {x},{y} {w}x{h}")
 
-    elif cmd == '--combine-rgb':
+    elif cmd in ['--combine-rgb']:
         if len(sys.argv) != 6:
             sys.exit(0)
         combine_to_rgb(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
