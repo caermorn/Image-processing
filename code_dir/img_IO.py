@@ -28,6 +28,19 @@ def load_tiff(file_path: str):
         print("Error loading file:", e)
         return None
 
+# save .tiff 
+def save_tiff(img, file_path):
+    try:
+        if img.dtype != np.uint8:
+            img = normalize_uint8(img)
+
+        tiff = TIFF.open(file_path, mode='w')
+        tiff.write_image(img)
+        tiff.close()
+        print(f"Saved image to {file_path}")
+    except Exception as e:
+        print("Error:", e)
+
 # Display functions
 def show_grayscale(img, title=None):
     plt.imshow(img, cmap='gray', interpolation='nearest', vmin=0, vmax=255)
